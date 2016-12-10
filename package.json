@@ -1,0 +1,44 @@
+{
+  "name": "graphdl",
+  "description": "A GraphQL Schema Definition Language, for terse GraphQL Schema creation",
+  "version": "0.0.1",
+  "keywords": [
+    "graphql",
+    "react",
+    "database",
+    "language",
+    "parser",
+    "schema"
+  ],
+  "scripts": {
+    "prestart": "rimraf build/*",
+    "start": "webpack --watch",
+    "prebuild": "rimraf build/*",
+    "build": "cross-env NODE_ENV=production webpack",
+    "deploy": "git add .; git commit -am \"comitting and pushing new patch version\"; git push origin master; now --npm;"
+  },
+  "main": "build/index.js",
+  "module": "src/index.js",
+  "author": "Matt Keas (@matthiasak)",
+  "license": "MIT",
+  "devDependencies": {
+    "@terse/webpack": "^1.0.6",
+    "babel-core": "^6.18.2",
+    "babel-loader": "^6.2.8",
+    "babel-polyfill": "^6.16.0",
+    "babel-preset-babili": "^0.0.9",
+    "babel-preset-stage-0": "^6.16.0",
+    "cross-env": "^3.1.3",
+    "ghooks": "^1.3.2",
+    "now": "^0.33.0",
+    "npm-run-all": "^3.1.1",
+    "optimize-js-plugin": "^0.0.4",
+    "rimraf": "^2.5.4",
+    "start-server-webpack-plugin": "^2.1.1",
+    "webpack": "^2.1.0-beta",
+    "yarn": "^0.17.9"
+  },
+  "dependencies": {
+    "graphql": "^0.8.2"
+  }
+}
