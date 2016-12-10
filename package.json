@@ -15,7 +15,7 @@
     "start": "webpack --watch",
     "prebuild": "rimraf build/*",
     "build": "cross-env NODE_ENV=production webpack",
-    "deploy": "git add .; git commit -am \"comitting and pushing new patch version\"; git push origin master; now --npm;"
+    "deploy": "git add .; git commit -am \"comitting and pushing new patch version\"; npm version patch; git push origin master; npm publish;"
   },
   "main": "build/index.js",
   "module": "src/index.js",
