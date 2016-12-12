@@ -7,6 +7,7 @@ Author {
     firstName: String
     lastName: String
 	votes: Int
+	# posts: Post
 }
 
 Post {
@@ -22,8 +23,8 @@ Query {
 }
 
 Mutation {
-    upvotePost(postId: Int!): Post
-    updateAuthor(authorId: Int!): Author
+    # upvotePost(postId: Int!): Post
+    # updateAuthor(authorId: Int!): Author
     addPost(title:String votes:Int author:Int): Post
     addAuthor(firstName:String lastName:String votes:Int): Author
 }
@@ -72,19 +73,19 @@ const resolvers = {
         , authors: () => authors
     }
     , Mutation: {
-        upvotePost: (_, {postId}) => {
-            const p = posts.filter(x => postId === x.id)
-            if(!p) throw `Couldn't find post with id ${postId}`
-            p.votes += 1
-            return p
-        }
-        , upvoteAuthor: (_, {authorId}) => {
-            const a = authors.filter(x => authorId === x.id)
-            if(!a) throw `Couldn't find author with id ${authorId}`
-            a.votes++
-            return a
-        }
-        , addPost: (_, {title, votes, author}) => {
+        // upvotePost: (_, {postId}) => {
+        //     const p = posts.filter(x => postId === x.id)
+        //     if(!p) throw `Couldn't find post with id ${postId}`
+        //     p.votes += 1
+        //     return p
+        // }
+        // , upvoteAuthor: (_, {authorId}) => {
+        //     const a = authors.filter(x => authorId === x.id)
+        //     if(!a) throw `Couldn't find author with id ${authorId}`
+        //     a.votes++
+        //     return a
+        // }
+        addPost: (_, {title, votes, author}) => {
             let p ={
                 id: posts.length
                 , title

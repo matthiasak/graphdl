@@ -2,6 +2,8 @@
 
 Graph Description Language is a GraphQL Schema Definition Language / syntax that enables terse GraphQL Schema creation with far fewer lines of code.
 
+> Note: this is experimental and for learning-purposes. For fullest GraphQL schema language implementation, use `buildSchema()` from the `graphql` npm library. More info: http://graphql.org/learn/schema/.
+
 ## What? Why?
 
 GraphQL is a pretty cool piece of tech that allows application clients (browsers, native apps, etc) to query for data from a server without making multiple RESTful requests. Imagine querying a GitHub user, all her/his projects, and each of those projects contributors from the GitHub API. If I were pulling my GitHub information (username `@matthiasak`), I would make these requests:

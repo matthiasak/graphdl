@@ -17,20 +17,16 @@ const {
     , graphql: g
 } = graphql
 
-// // https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form
-// const BNF = `
-// PROGRAM = SECTION | SECTION PROGRAM
-// SECTION = MODEL | QUERY | MUTATION
-// MODEL = KEY { EXPR-BODY }
-// KEY = [a-z_0-9]
-// EXPR-BODY = EXPR | EXPR EXPR-BODY
-// EXPR = KEY : TYPE-EXPR
-// TYPE-EXPR = [ TYPE ] | TYPE! | TYPE
-// TYPE = Int | String | Boolean | Float | KEY
-// QUERY = Query { EXPR-BODY }
-// MUTATION = Mutation { MUT-EXPR }
-// MUT-EXPR = KEY ( EXPR-BODY ) : TYPE
-// `
+/*
+BNF
+PROGRAM = OBJECTQUERY | OBJECTQUERY PROGRAM
+OBJECTQUERY = NAME { FIELDLIST }
+FIELDLIST = FIELD | FIELD FIELDLIST
+FIELD = NAME ( ARGLIST ) : TYPE
+ARGLIST = NAME : TYPE | NAME : TYPE ARGLIST
+TYPE = Int | Float | String | Enum | Boolean | NAME REQUIREDFLAG
+REQUIREDFLAG = ? | ''
+*/
 
 const
 	PARTS = {
@@ -44,15 +40,20 @@ const
     	, EXCL: "\\!"
         , COLON : ":"
     }
-	// , COMMENT = "(#.*(?=\\n*))"
+	, COMMENT = /#.*$/igm
 	, ALL = Object.keys(PARTS).map(k => PARTS[k])
 	, ANY = new RegExp(`${ALL.join('|')}`,`ig`)
 	, r = s => new RegExp(s, 'ig')
-	, t = (type,val) => ({type, val})
+	, t = (type,val) => {
+		let r = {type}
+		if(val !== undefined) r = {...r, val}
+		return r
+	}
     , m = (str, regex) => str.match(r(regex))
 
 const lexer = s =>
 	s
+	.replace(COMMENT, '')
     .match(ANY)
 	.map(x => {
         if(m(x, PARTS.KEY)) return t('key',x)
@@ -89,48 +90,61 @@ const parseType = tokens => {
         	, n2 = tokens.shift()
 
         if(n2.type !== 'close-sq')
-            throw new Error(`Syntax error: ${n.type}_${n.val}`)
+            throw new Error(`Syntax error: ${n.type}_${n.val} -- from ${pretty(tokens)}`)
 
         return t('array-of', n1.val)
     }
-    throw new Error(`Syntax error: ${n.type}_${n.val}`)
+    throw new Error(`Syntax error: ${n.type}_${n.val} -- from ${pretty(tokens)}`)
 }
 
-const parseExprBodies = tokens => {
+const parseExpressions = tokens => {
     let result = []
     while(tokens.length > 0){
         let key = tokens.shift()
         	, colon = tokens.shift()
         	, type = parseType(tokens)
+
+        if(!is('colon')(colon)) throw `Colon expected in ${pretty(tokens)}`
+        if(!is('key')(key)) throw `NAME expected in ${pretty(tokens)}`
+
         type.name = key.val
         result.push(type)
     }
     return result
 }
 
-const parseMutExpr = tokens => {
-    let result = []
-    while(tokens.length > 0){
-        let p1 = indexOf(tokens, x => x.type === 'close-paren')
-        if(p1 === -1) throw "Closing ) not found in mutation"
+const pretty = a => a.map(x => x.val).join(' ')
+const p = a => JSON.stringify(a, null, '  ')
 
-        let [first, p0, ...rest] = tokens.splice(0,p1+1+2)
-        	, [type, colon] = rest.concat().reverse()
+const is = t => x => x.type === t
 
-        rest = rest.slice(0,rest.length-3)
+const parseArgs = tokens => {
+	let p0 = indexOf(tokens, is('open-paren'))
+		, p1 = indexOf(tokens, is('close-paren'))
+	if(p0 === -1 && p1 !== -1 || p0 !== -1 && p1 === -1) throw `Unmatched parentheses in ${pretty(tokens)}`
+	if(p0 === -1 && p1 === -1) return null
+	let [p0_match, ...rest] = tokens.splice(0,p1+1)
+	rest.pop() // remove closing paren
+	return parseExpressions(rest)
+}
 
-        let mutation = t('arguments', parseExprBodies(rest))
-        mutation.outputType = type
-        mutation.name = first.val
-        result.push(mutation)
-    }
-    return result
+const parseField = tokens => {
+	let name = tokens.shift()
+	if(!is('key')(name)) throw `NAME expected at ${pretty(tokens)}`
+	let AST = t('field')
+	AST.name = name.val
+	let args = parseArgs(tokens)
+	if(args) AST.args = args
+	if(!is('colon')(tokens.shift()))
+		throw `Colon : expected in ${pretty(tokens)}`
+	AST.outputType = parseType(tokens)
+	return AST
 }
 
 const parseSection = tokens => {
     if(tokens.length === 0) return
 
-    let indexOfClose = indexOf(tokens, x => x.type === 'close-curly')
+    let indexOfClose = indexOf(tokens, is('close-curly'))
     	, slice = indexOfClose !== -1 ? tokens.splice(0, indexOfClose+1) : []
 		, [first, ...rest] = slice
     	, AST
@@ -142,39 +156,39 @@ const parseSection = tokens => {
             if(l.type !== 'close-curly') throw `Syntax, } expected`
         }
 
-    if(first.type !== 'key') throw `Syntax error with ${first.type}:${first.val}, expected a KEY`
+    if(first.type !== 'key') throw `Syntax error with ${first.type}:${first.val}, expected a KEY; ${pretty(tokens)}`
 
-    if(first.val === 'Query') {
-        AST = t('Query')
-        checkForBrackets()
-        AST.children = parseExprBodies(rest)
-    } else if(first.val === 'Mutation') {
-        AST = t('Mutation')
-        checkForBrackets()
-        AST.children = parseMutExpr(rest)
-    } else {
-        AST = t('Model', first.val)
-        checkForBrackets()
-        AST.children = parseExprBodies(rest)
-    }
+    AST = t('OBJECT', first.val)
+	checkForBrackets()
 
+	let fields = []
+	while(rest.length > 0){
+		fields.push(parseField(rest))
+	}
+
+	AST.fields = fields
     return AST
 }
 
 const parseProgram = (tokens) => {
-    let AST =  t('graphql', [])
+    let AST =  t('SCHEMA')
     	, section
-
-    while((section = parseSection(tokens))){
-        AST.val.push(section)
-    }
-
+    AST.children = []
+    while((section = parseSection(tokens)))
+    	AST.children.push(section)
     return AST
 }
 
 const parser = tokens => parseProgram(tokens)
 
 const parse = str => parser(lexer(str))
+
+const groupBy = (arr, fn) =>
+	arr.reduce((acc, v, i, arr) => {
+		let key = fn(v, i)
+		if(!acc[key]) return {...acc, [key]: [v]}
+		return {...acc, [key]: [...acc[key], v]}
+	}, {})
 
 const config = (AST, resolvers) => {
 
@@ -205,85 +219,46 @@ const config = (AST, resolvers) => {
         }
     }
 
-    const GQLTypeNeedsResolver = type =>
-    	'Int|Float|Boolean|String'.split('|').indexOf(type) === -1
+    const createObjectType = ({val, fields}) => {
+        let f = fields.reduce((acc,
+        	{args, outputType, name}) => {
+        	let {val:out, type:outtype} = outputType
+		    let r = { type: GQLMod(outtype, GQLType(out)) }
 
-    const createFields = (children, modelName) =>
-        children.reduce((acc, {type, val, name}) => {
-            let scalar = GQLType(val)
-                , t = GQLMod(type, scalar)
-            	, typeDescr = GQLTypeNeedsResolver(val)
-            		? {type: t, resolve: resolvers[modelName][name]}
-                	: {type: t}
-
-            return {...acc, [name]: typeDescr}
-        }, {})
-
-    const createModel = ({val:name, children}) => {
-        let m = new OBJ({
-            name,
-            fields: createFields(children, name)
-        })
-        map[name] = m
-        return m
-    }
-
-    const createQuery = () => {
-        const {children} = query
-        let f = children.reduce((acc, {type, val, name}) => ({
-            ...acc
-            , [name]: {
-                type: GQLMod(type, GQLType(val))
-                , resolve: resolvers["Query"][name]
-            }
-        }), {})
-
-        return new OBJ({
-            name: 'queries'
-            , fields: () => f
-        })
-    }
-
-    const createMutation = () => {
-        const {children} = mutation
-        let f = children.reduce((acc, {val:args, outputType:{val:out}, name}) => ({
-            ...acc
-            , [name]: {
-                type: GQLType(out)
-                , args: args.reduce((acc,{type,val,name}) => {
+	        if(args)
+		        r.args = args.reduce((acc,{type,val,name}) => {
                     return {
                         ...acc
                         , [name]: {type: GQLMod(type, GQLType(val))}
                     }
                 }, {})
-        		, resolve: resolvers["Mutation"][name]
-            }
-        }), {})
 
-        return new OBJ({
-            name: 'mutations'
+	        if(resolvers[val] && resolvers[val][name])
+	        	r.resolve = resolvers[val][name]
+
+	        return {...acc, [name]: r}
+	    }, {})
+
+        return map[val] = new OBJ({
+            name: val
             , fields: () => f
         })
     }
 
-    let models = AST.val
-    	, query = models.filter(x => x.type === 'Query')
-    	, mutation = models.filter(x => x.type === 'Mutation')
-    	, map = {} // key:val pairs of Models
+    let map = {}
+    	, {query, mutation, model:objs} =
+    		groupBy(AST.children, x =>
+    			x.val === 'Query' ? 'query' :
+    				(x.val === 'Mutation' ? 'mutation' : 'model'))
 
-    if(query.length !== 1) throw `Should only be 1 Query object with a Schema`
-    if(mutation.length !== 1) throw `Should only be 1 Query object with a Schema`
+    if(query.length !== 1) throw `There needs to be 1 Query object definition within your Schema.`
+	if(mutation.length > 1) throw `There can only be 1 Mutation object definition.`
 
-    query = query[0]
-    mutation = mutation[0]
-    models = models
-        .filter(x => x.type === 'Model')
-        .map(x => createModel(x))
+	objs = objs.map(x => createObjectType(x))
+    query = createObjectType(query.shift())
+    mutation = mutation.length ? createObjectType(mutation.shift()) : null
 
-    return new SCHEMA({
-        query: createQuery()
-        , mutation: createMutation()
-    })
+    return new SCHEMA({ query , mutation })
 }
 
 const init = (str, resolvers) => {
